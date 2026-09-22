@@ -21,10 +21,12 @@ custom/
 - Allowlist ghi file: `/etc/cockpit/cockpit.conf`, `/etc/ssh/ssh_known_hosts`, `/etc/cockpit/ssh/*`
 - Entry point tự restore snapshot (all-or-nothing) trước khi start watcher.
 
-## Login (PAM)
+## Login (local password via PAM / cockpit-session)
 
 - Env: `COCKPIT_USER`, `COCKPIT_PASSWORD`
-- Entrypoint chạy `useradd` + `chpasswd` khi boot → login page dùng user/local password.
+- Base image `fedora:43` + dnf `cockpit-ws cockpit-bridge shadow-utils` (có `cockpit-session` + PAM; `quay.io/cockpit/ws` strip cả hai).
+- Entrypoint: `useradd`/`chpasswd` → ghi `cockpit.conf` với `[Basic] Command = /usr/libexec/cockpit-session` → `cockpit-ws --no-tls`.
+- Login page: username + password (PAM local; không cần sshd hay `--local-ssh`).
 
 ## Bridge overlay (BUILD_BRIDGE)
 

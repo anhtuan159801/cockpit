@@ -2,18 +2,30 @@
 """Entrypoint for cockpit on Koyeb.
 
 Resolves the listen port, restores a Supabase config snapshot if configured,
-starts a background sync watcher, then execs cockpit-ws directly (--no-tls).
-Skips containers/ws/label-run: that script assumes privileged/host mounts and
-ssh-agent, and fails silently on Koyeb.
+creates the login user from COCKPIT_USER/COCKPIT_PASSWORD, starts a background
+sync watcher, then execs cockpit-ws (--no-tls).
+
+Local password login uses cockpit-session (PAM) via [Basic] Command — no SSH
+loopback/sshd required. Skips containers/ws/label-run (privileged/host mounts).
 """
 
 import os
 import sys
 import re
+import shutil
 import subprocess
 
 sys.path.insert(0, "/custom/pylibs")
-sys.path.insert(0, "/custom/bridge")
+
+# Optional bridge overlay (BUILD_BRIDGE=1 bakes this path at image build).
+if os.path.isfile("/custom/bridge.path"):
+    try:
+        with open("/custom/bridge.path") as f:
+            bridge_path = f.read().strip()
+        if bridge_path:
+            sys.path.insert(0, bridge_path)
+    except OSError:
+        pass
 
 try:
     from supabase_sync import restore, watch  # noqa: E402
@@ -28,12 +40,15 @@ except Exception as exc:
 
 PORT_RE = re.compile(r"^KOYEB_PORT_(\d+)_PROTOCOL$")
 
-# Minimal cockpit.conf for Koyeb (proxy TLS). Overrides any restored snapshot
-# so RequireHost / bastion SSH auth cannot break the health check.
+# Minimal cockpit.conf for Koyeb (proxy TLS). [Basic] Command points at
+# cockpit-session so local password auth works without systemd socket activation.
 SAFE_CONF = """\
 [WebService]
 ProtocolHeader = X-Forwarded-Proto
 LoginTitle = Cockpit
+
+[Basic]
+Command = /usr/libexec/cockpit-session
 """
 
 
@@ -57,43 +72,53 @@ def ensure_runtime() -> None:
             f.write("NAME=cockpit\nID=cockpit\n")
 
 
-def ensure_login_user() -> None:
-    """Create/update local PAM user from COCKPIT_USER + COCKPIT_PASSWORD."""
+def _run(cmd, input_text=None, check=False):
+    return subprocess.run(
+        cmd,
+        input=input_text,
+        text=True,
+        capture_output=True,
+        check=check,
+    )
+
+
+def ensure_login_user() -> bool:
+    """Create/update local user from COCKPIT_USER + COCKPIT_PASSWORD. Returns True if ready."""
     user = os.environ.get("COCKPIT_USER", "").strip()
     password = os.environ.get("COCKPIT_PASSWORD", "")
     if not user or not password:
-        return
+        print("[entrypoint] COCKPIT_USER/PASSWORD not set — skip user create", file=sys.stderr, flush=True)
+        return False
+
+    if shutil.which("useradd") is None:
+        print("[entrypoint] FATAL useradd not found (shadow-utils missing)", file=sys.stderr, flush=True)
+        return False
+
     try:
-        exists = subprocess.run(
-            ["id", "-u", user],
-            capture_output=True,
-            check=False,
-        ).returncode == 0
+        exists = _run(["id", "-u", user]).returncode == 0
         if not exists:
-            subprocess.run(
-                ["useradd", "-m", "-s", "/bin/sh", user],
-                capture_output=True,
-                check=True,
-            )
+            r = _run(["useradd", "-m", "-u", "1000", "-s", "/bin/sh", user])
+            if r.returncode != 0 and "already exists" not in (r.stderr or ""):
+                # UID 1000 may be taken — retry without fixed UID.
+                r = _run(["useradd", "-m", "-s", "/bin/sh", user])
+            if r.returncode != 0 and "already exists" not in (r.stderr or ""):
+                print(f"[entrypoint] useradd failed: {r.stderr.strip()}", file=sys.stderr, flush=True)
+                return False
             print(f"[entrypoint] created user {user}", file=sys.stderr, flush=True)
-        # chpasswd: set password non-interactively (PAM auth for cockpit-ws).
-        proc = subprocess.run(
-            ["chpasswd"],
-            input=f"{user}:{password}\n",
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if proc.returncode != 0:
-            print(
-                f"[entrypoint] chpasswd failed: {proc.stderr.strip()}",
-                file=sys.stderr,
-                flush=True,
-            )
-        else:
-            print(f"[entrypoint] login user ready: {user}", file=sys.stderr, flush=True)
+
+        r = _run(["chpasswd"], input_text=f"{user}:{password}\n")
+        if r.returncode != 0:
+            print(f"[entrypoint] chpasswd failed: {r.stderr.strip()}", file=sys.stderr, flush=True)
+            return False
+
+        # Ensure account is not locked / expired.
+        _run(["passwd", "-u", user])
+        _run(["chage", "-m", "0", "-M", "99999", "-I", "-1", user])
+        print(f"[entrypoint] login user ready: {user}", file=sys.stderr, flush=True)
+        return True
     except Exception as exc:
         print(f"[entrypoint] ensure_login_user error: {exc}", file=sys.stderr, flush=True)
+        return False
 
 
 def main() -> None:
@@ -112,7 +137,13 @@ def main() -> None:
     ensure_runtime()
     print("[entrypoint] wrote safe /etc/cockpit/cockpit.conf", file=sys.stderr, flush=True)
 
-    ensure_login_user()
+    user_ok = ensure_login_user()
+    if not user_ok:
+        print(
+            "[entrypoint] WARNING login user not ready — auth may fail",
+            file=sys.stderr,
+            flush=True,
+        )
 
     try:
         watch()
@@ -124,6 +155,7 @@ def main() -> None:
         print(f"[entrypoint] FATAL missing {ws}", file=sys.stderr, flush=True)
         sys.exit(1)
 
+    # Local password auth via cockpit-session (PAM) — no --local-ssh/sshd.
     argv = [ws, "--no-tls", "--port", port]
     print(f"[entrypoint] exec {' '.join(argv)}", file=sys.stderr, flush=True)
     os.execv(ws, argv)
