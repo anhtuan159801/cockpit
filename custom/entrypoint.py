@@ -63,6 +63,15 @@ def resolve_port() -> str:
 def ensure_runtime() -> None:
     os.makedirs("/run/cockpit/tls", exist_ok=True)
     os.makedirs("/etc/cockpit", exist_ok=True)
+    os.makedirs("/var/log", exist_ok=True)
+    for name, mode in (("btmp", 0o664), ("wtmp", 0o664), ("lastlog", 0o664)):
+        path = f"/var/log/{name}"
+        if not os.path.exists(path):
+            open(path, "a").close()
+        try:
+            os.chmod(path, mode)
+        except OSError:
+            pass
     # Always write a known-good conf (restored snapshot may be bastion-only).
     with open("/etc/cockpit/cockpit.conf", "w") as f:
         f.write(SAFE_CONF)

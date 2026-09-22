@@ -63,7 +63,11 @@ RUN dnf install -y \
       --setopt=install_weak_deps=False \
       cockpit-ws cockpit-bridge openssh-clients shadow-utils passwd python3 \
     && dnf clean all \
-    && rm -rf /var/cache/dnf /var/log/*
+    && rm -rf /var/cache/dnf \
+    && mkdir -p /var/log \
+    && touch /var/log/btmp /var/log/wtmp /var/log/lastlog \
+    && chmod 664 /var/log/btmp /var/log/wtmp \
+    && chmod 664 /var/log/lastlog
 
 # Python path: cryptography always; bridge sources only when BUILD_BRIDGE=1.
 ENV PYTHONPATH=/custom/pylibs
