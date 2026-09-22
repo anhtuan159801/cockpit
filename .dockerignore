@@ -1,0 +1,21 @@
+# Build context exclusions for cockpit Koyeb Docker image.
+.git
+.trellis
+.agents
+.codex
+.opencode
+node_modules
+dist
+package-lock.json
+*.md
+!custom/README.md
+.env
+.env.*
+!.env.example
+supabase
+docs
+doc
+test
+po/*.pot
+*.pyc
+__pycache__
