@@ -159,6 +159,25 @@ def main() -> None:
     except Exception as exc:
         print(f"[entrypoint] watcher not started: {exc}", file=sys.stderr, flush=True)
 
+    # Start dbus-daemon so cockpit-bridge can attach to the system bus
+    # (without it: sd_bus_attach_event Invalid argument → bridge crash → Disconnect).
+    if os.path.isfile("/usr/bin/dbus-daemon"):
+        if not os.path.exists("/run/dbus/system_bus_socket"):
+            os.makedirs("/run/dbus", exist_ok=True)
+            if not os.path.exists("/var/lib/dbus/machine-id"):
+                subprocess.run(["dbus-uuidgen", "--ensure=/var/lib/dbus/machine-id"], capture_output=True)
+            r = subprocess.run(
+                ["dbus-daemon", "--system", "--fork"],
+                capture_output=True,
+                text=True,
+            )
+            if r.returncode == 0:
+                print("[entrypoint] dbus-daemon started", file=sys.stderr, flush=True)
+            else:
+                print(f"[entrypoint] dbus-daemon failed: {r.stderr.strip()}", file=sys.stderr, flush=True)
+        else:
+            print("[entrypoint] system bus socket already present", file=sys.stderr, flush=True)
+
     ws = "/usr/libexec/cockpit-ws"
     if not os.path.isfile(ws):
         print(f"[entrypoint] FATAL missing {ws}", file=sys.stderr, flush=True)

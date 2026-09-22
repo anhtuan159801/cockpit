@@ -58,16 +58,17 @@ FROM fedora:43
 
 ARG BUILD_BRIDGE=0
 
-# Cockpit + local login tools + python for entrypoint/sync.
+# Cockpit + local login tools + python for entrypoint/sync + dbus (system bus).
 RUN dnf install -y \
       --setopt=install_weak_deps=False \
-      cockpit-ws cockpit-bridge openssh-clients shadow-utils passwd python3 \
+      cockpit-ws cockpit-bridge openssh-clients shadow-utils passwd python3 dbus \
     && dnf clean all \
     && rm -rf /var/cache/dnf \
-    && mkdir -p /var/log \
+    && mkdir -p /var/log /run/dbus \
     && touch /var/log/btmp /var/log/wtmp /var/log/lastlog \
     && chmod 664 /var/log/btmp /var/log/wtmp \
-    && chmod 664 /var/log/lastlog
+    && chmod 664 /var/log/lastlog \
+    && test -f /var/lib/dbus/machine-id || dbus-uuidgen --ensure=/var/lib/dbus/machine-id
 
 # Python path: cryptography always; bridge sources only when BUILD_BRIDGE=1.
 ENV PYTHONPATH=/custom/pylibs
