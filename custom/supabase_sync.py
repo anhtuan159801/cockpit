@@ -163,24 +163,21 @@ def upload() -> None:
         "checksum": checksum(ct),
         "updated_at": "now()",
     }
-    _req(
-        cfg,
-        "POST",
-        f"{TABLE}?on_conflict=instance_id",
-        body=row,
-    )
-    # Prefer header for upsert merge — urllib cannot set easily; use PATCH fallback.
-    # Re-issue as upsert via Prefer header:
     url = cfg["url"] + f"/rest/v1/{TABLE}?on_conflict=instance_id"
     headers = {
         "apikey": cfg["key"],
         "Authorization": f"Bearer {cfg['key']}",
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
     }
     req = urllib.request.Request(url, data=json.dumps(row).encode(), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=15):
-        pass
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 204:
+            return
+        raise RuntimeError(f"HTTP {e.code}: {e.read().decode(errors='replace')[:200]}")
 
 
 def restore() -> None:
