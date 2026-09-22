@@ -40,27 +40,14 @@ RUN mkdir -p /custom/pylibs && \
     python3 -c "import sys; sys.path.insert(0, '/custom/pylibs'); from cryptography.hazmat.primitives.ciphers.aead import AESGCM; print('ok')"
 
 # ---------------------------------------------------------------------------
-# Stage 3 — optional bridge overlay (BUILD_BRIDGE=1)
-# Uses build-context vendor/ + src/cockpit/ (submodules are checked out).
-# When disabled, stages empty dirs so final COPY always succeeds.
+# Stage 3 — bridge overlay placeholder.
+# Koyeb's deploy archive omits vendor/ by default (--archive-ignore-dir), so
+# this stage only stages empty dirs. To build with BUILD_BRIDGE=1, deploy with
+# --archive-ignore-dir .git --archive-ignore-dir node_modules (include vendor/)
+# and restore COPY vendor/ + COPY src/cockpit/ here.
 # ---------------------------------------------------------------------------
 FROM alpine AS bridge
-ARG BUILD_BRIDGE=0
-WORKDIR /tmp
-COPY vendor/ /tmp/vendor/
-COPY src/cockpit/ /tmp/src-cockpit/
-RUN mkdir -p /out/bridge /out/vendor && \
-    if [ "$BUILD_BRIDGE" = "1" ]; then \
-      cp -a /tmp/src-cockpit /out/bridge/cockpit && \
-      cp -a /tmp/vendor /out/vendor/ && \
-      for d in bei ferny systemd_ctypes; do \
-        src_file="/tmp/vendor/${d}/src"; \
-        if [ -e "$src_file" ]; then \
-          rm -f "/out/bridge/cockpit/_vendor/${d}" && \
-          ln -s "$src_file" "/out/bridge/cockpit/_vendor/${d}"; \
-        fi; \
-      done; \
-    fi
+RUN mkdir -p /out/bridge /out/vendor
 
 # ---------------------------------------------------------------------------
 # Final image — Fedora base so cockpit-session (PAM local auth) is present.
