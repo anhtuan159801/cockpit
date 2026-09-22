@@ -230,8 +230,14 @@ def watch(interval: int = 60) -> None:
             upload()
             delay = 5
         except Exception as exc:
-            print(f"[sync] upload failed: {exc}", file=sys.stderr)
-            delay = min(delay * 2, RETRY_CAP)
+            msg = str(exc)
+            # Table missing / not ready: back off hard so logs stay readable.
+            if "404" in msg or "PGRST205" in msg:
+                delay = min(max(delay * 2, 60), 300)
+                print(f"[sync] upload deferred (schema?): {msg[:200]}", file=sys.stderr)
+            else:
+                delay = min(delay * 2, RETRY_CAP)
+                print(f"[sync] upload failed: {exc}", file=sys.stderr)
         time.sleep(delay)
 
 

@@ -36,6 +36,7 @@ def resolve_port() -> str:
 
 def main() -> None:
     port = resolve_port()
+    print(f"[entrypoint] listening on port {port} (PORT={os.environ.get('PORT', '')})", file=sys.stderr)
 
     # Restore snapshot before anything else (all-or-nothing).
     try:
@@ -50,6 +51,7 @@ def main() -> None:
         print(f"[entrypoint] watcher not started: {exc}", file=sys.stderr)
 
     label_run = "/container/label-run"
+    print(f"[entrypoint] exec {label_run} --no-tls --port {port}", file=sys.stderr)
     os.execv(label_run, [label_run, "--no-tls", "--port", port])
 
 
