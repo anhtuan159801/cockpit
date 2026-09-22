@@ -61,14 +61,18 @@ ARG BUILD_BRIDGE=0
 # Cockpit + local login tools + python for entrypoint/sync + dbus (system bus).
 RUN dnf install -y \
       --setopt=install_weak_deps=False \
-      cockpit-ws cockpit-bridge openssh-clients shadow-utils passwd python3 dbus \
+      cockpit-ws cockpit-bridge openssh-clients shadow-utils passwd python3 \
+      dbus-daemon dbus-common \
     && dnf clean all \
     && rm -rf /var/cache/dnf \
-    && mkdir -p /var/log /run/dbus \
+    && mkdir -p /var/log /run/dbus /var/lib/dbus \
     && touch /var/log/btmp /var/log/wtmp /var/log/lastlog \
     && chmod 664 /var/log/btmp /var/log/wtmp \
     && chmod 664 /var/log/lastlog \
-    && test -f /var/lib/dbus/machine-id || dbus-uuidgen --ensure=/var/lib/dbus/machine-id
+    && if [ ! -f /var/lib/dbus/machine-id ] && [ ! -f /etc/machine-id ]; then \
+         python3 -c "import uuid; open('/var/lib/dbus/machine-id','w').write(uuid.uuid4().hex)"; \
+       fi \
+    && test -x /usr/bin/dbus-daemon
 
 # Python path: cryptography always; bridge sources only when BUILD_BRIDGE=1.
 ENV PYTHONPATH=/custom/pylibs

@@ -164,8 +164,14 @@ def main() -> None:
     if os.path.isfile("/usr/bin/dbus-daemon"):
         if not os.path.exists("/run/dbus/system_bus_socket"):
             os.makedirs("/run/dbus", exist_ok=True)
-            if not os.path.exists("/var/lib/dbus/machine-id"):
-                subprocess.run(["dbus-uuidgen", "--ensure=/var/lib/dbus/machine-id"], capture_output=True)
+            if not os.path.exists("/var/lib/dbus/machine-id") and not os.path.exists("/etc/machine-id"):
+                try:
+                    import uuid
+                    os.makedirs("/var/lib/dbus", exist_ok=True)
+                    with open("/var/lib/dbus/machine-id", "w") as f:
+                        f.write(uuid.uuid4().hex)
+                except OSError as exc:
+                    print(f"[entrypoint] machine-id: {exc}", file=sys.stderr, flush=True)
             r = subprocess.run(
                 ["dbus-daemon", "--system", "--fork"],
                 capture_output=True,
