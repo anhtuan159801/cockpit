@@ -82,7 +82,7 @@ def main() -> None:
         print(f"[entrypoint] FATAL missing {ws}", file=sys.stderr, flush=True)
         sys.exit(1)
 
-    argv = [ws, "--no-tls", "--port", port, "--address", ""]
+    argv = [ws, "--no-tls", "--port", port]
     print(f"[entrypoint] exec {' '.join(argv)}", file=sys.stderr, flush=True)
     os.execv(ws, argv)
 
