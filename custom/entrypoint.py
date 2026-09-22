@@ -10,6 +10,7 @@ ssh-agent, and fails silently on Koyeb.
 import os
 import sys
 import re
+import subprocess
 
 sys.path.insert(0, "/custom/pylibs")
 sys.path.insert(0, "/custom/bridge")
@@ -56,6 +57,45 @@ def ensure_runtime() -> None:
             f.write("NAME=cockpit\nID=cockpit\n")
 
 
+def ensure_login_user() -> None:
+    """Create/update local PAM user from COCKPIT_USER + COCKPIT_PASSWORD."""
+    user = os.environ.get("COCKPIT_USER", "").strip()
+    password = os.environ.get("COCKPIT_PASSWORD", "")
+    if not user or not password:
+        return
+    try:
+        exists = subprocess.run(
+            ["id", "-u", user],
+            capture_output=True,
+            check=False,
+        ).returncode == 0
+        if not exists:
+            subprocess.run(
+                ["useradd", "-m", "-s", "/bin/sh", user],
+                capture_output=True,
+                check=True,
+            )
+            print(f"[entrypoint] created user {user}", file=sys.stderr, flush=True)
+        # chpasswd: set password non-interactively (PAM auth for cockpit-ws).
+        proc = subprocess.run(
+            ["chpasswd"],
+            input=f"{user}:{password}\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            print(
+                f"[entrypoint] chpasswd failed: {proc.stderr.strip()}",
+                file=sys.stderr,
+                flush=True,
+            )
+        else:
+            print(f"[entrypoint] login user ready: {user}", file=sys.stderr, flush=True)
+    except Exception as exc:
+        print(f"[entrypoint] ensure_login_user error: {exc}", file=sys.stderr, flush=True)
+
+
 def main() -> None:
     port = resolve_port()
     print(
@@ -71,6 +111,8 @@ def main() -> None:
 
     ensure_runtime()
     print("[entrypoint] wrote safe /etc/cockpit/cockpit.conf", file=sys.stderr, flush=True)
+
+    ensure_login_user()
 
     try:
         watch()

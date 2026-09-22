@@ -21,6 +21,11 @@ custom/
 - Allowlist ghi file: `/etc/cockpit/cockpit.conf`, `/etc/ssh/ssh_known_hosts`, `/etc/cockpit/ssh/*`
 - Entry point tự restore snapshot (all-or-nothing) trước khi start watcher.
 
+## Login (PAM)
+
+- Env: `COCKPIT_USER`, `COCKPIT_PASSWORD`
+- Entrypoint chạy `useradd` + `chpasswd` khi boot → login page dùng user/local password.
+
 ## Bridge overlay (BUILD_BRIDGE)
 
 Mặc định `BUILD_BRIDGE=0` — image dùng bridge có sẵn trong `quay.io/cockpit/ws`.
