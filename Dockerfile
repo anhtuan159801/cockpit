@@ -29,17 +29,15 @@ RUN node build.js
 
 # ---------------------------------------------------------------------------
 # Stage 2 — python deps for Supabase sync (cryptography)
+# Install via pip --target so native .so wheels land in one tree (dnf paths
+# differ across lib/lib64 and the old cp || true failed silently).
 # ---------------------------------------------------------------------------
 FROM fedora:43 AS pydeps
-RUN dnf install -y python3-cryptography && dnf clean all
-# Copy only the packages needed at runtime into /custom/pylibs.
+RUN dnf install -y python3-pip python3-setuptools && dnf clean all
 RUN mkdir -p /custom/pylibs && \
-    cp -a /usr/lib/python3*/site-packages/cryptography \
-          /usr/lib/python3*/site-packages/cffi \
-          /usr/lib/python3*/site-packages/pycparser \
-          /custom/pylibs/ 2>/dev/null || true && \
-    # Include binary .libs directories if present.
-    find /usr/lib/python3*/site-packages -maxdepth 1 -name '*.libs' -exec cp -a {} /custom/pylibs/ \; 2>/dev/null || true
+    pip3 install --no-cache-dir --target /custom/pylibs cryptography && \
+    test -d /custom/pylibs/cryptography && \
+    python3 -c "import sys; sys.path.insert(0, '/custom/pylibs'); from cryptography.hazmat.primitives.ciphers.aead import AESGCM; print('ok')"
 
 # ---------------------------------------------------------------------------
 # Stage 3 — optional bridge overlay (BUILD_BRIDGE=1)
@@ -109,8 +107,7 @@ RUN if [ "$BUILD_BRIDGE" = "1" ]; then \
       done; \
     fi
 
-# Health check: unauthenticated static login page over plain HTTP (--no-tls).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -q --spider http://127.0.0.1:${PORT:-9090}/cockpit/static/login.html || exit 1
+# No Docker HEALTHCHECK: scratch-based ws image has no wget/curl.
+# Koyeb probes the service port / login path from the deployment config.
 
 ENTRYPOINT ["/container/custom/entrypoint.py"]

@@ -12,7 +12,16 @@ import re
 sys.path.insert(0, "/custom/pylibs")
 sys.path.insert(0, "/custom/bridge")
 
-from supabase_sync import restore, watch  # noqa: E402
+try:
+    from supabase_sync import restore, watch  # noqa: E402
+except Exception as exc:
+    print(f"[entrypoint] supabase_sync unavailable: {exc}", file=sys.stderr)
+
+    def restore() -> None:
+        return None
+
+    def watch() -> None:
+        return None
 
 PORT_RE = re.compile(r"^KOYEB_PORT_(\d+)_PROTOCOL$")
 

@@ -22,7 +22,10 @@ import time
 import urllib.error
 import urllib.request
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError:
+    AESGCM = None
 
 # --- constants -------------------------------------------------------------
 
@@ -79,6 +82,8 @@ def re_match_iid(v: str) -> bool:
 # --- crypto (AES-256-GCM envelope) ----------------------------------------
 
 def encrypt(plaintext: bytes, key: bytes) -> str:
+    if AESGCM is None:
+        raise RuntimeError("cryptography not available; cannot encrypt snapshot")
     iv = secrets.token_bytes(12)
     ct = AESGCM(key).encrypt(iv, plaintext, AAD)
     # AESGCM returns ciphertext||tag; last 16 bytes = tag.
@@ -92,6 +97,8 @@ def encrypt(plaintext: bytes, key: bytes) -> str:
 
 
 def decrypt(envelope_json: str, key: bytes) -> bytes:
+    if AESGCM is None:
+        raise RuntimeError("cryptography not available; cannot decrypt snapshot")
     env = json.loads(envelope_json)
     if env.get("version") != 1:
         raise RuntimeError(f"unsupported envelope version {env.get('version')}")
